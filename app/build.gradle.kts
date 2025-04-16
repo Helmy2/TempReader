@@ -61,4 +61,6 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(platform(libs.firebase.bom))
     implementation(libs.database)
+    implementation(libs.vico.compose)
+    implementation(libs.vico.compose.m3)
 }
