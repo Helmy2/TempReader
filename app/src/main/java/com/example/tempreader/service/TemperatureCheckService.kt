@@ -1,6 +1,7 @@
 package com.example.tempreader.service
 
 import android.annotation.SuppressLint
+import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -9,7 +10,6 @@ import android.content.IntentFilter
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
-import android.app.PendingIntent
 import com.example.tempreader.MainActivity
 
 class TemperatureCheckService : Service() {
@@ -36,6 +36,8 @@ class TemperatureCheckService : Service() {
 
     companion object {
         private const val STOP_RINGTONE_ACTION = "com.example.tempreader.STOP_RINGTONE"
+        private const val NOTIFICATION_ID = 1
+        private const val TAG = "TempCheckService"
     }
 
     @SuppressLint("MissingPermission")
@@ -87,7 +89,7 @@ class TemperatureCheckService : Service() {
                 val updatedNotification =
                     notificationHelper.updateForegroundNotification(message, pendingIntent)
                 if (notificationHelper.canPostNotifications()) {
-                    NotificationManagerCompat.from(this).notify(1, updatedNotification)
+                    NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, updatedNotification)
                 } else {
                     Log.w(
                         "Service",
@@ -129,21 +131,48 @@ class TemperatureCheckService : Service() {
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag", "ForegroundServiceType")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        registerReceiver(stopRingtoneReceiver, IntentFilter(STOP_RINGTONE_ACTION))
+        super.onStartCommand(intent, flags, startId)
 
-        val initialNotification = notificationHelper.createForegroundNotification(pendingIntent)
-        startForeground(1, initialNotification)
+        try {
+            if (!::temperatureChecker.isInitialized) {
+                Log.e(TAG, "TemperatureChecker not initialized!")
+                stopSelf()
+                return START_NOT_STICKY
+            }
 
-        temperatureChecker.startChecking()
+            registerReceiver(stopRingtoneReceiver, IntentFilter(STOP_RINGTONE_ACTION))
+            
+            val initialNotification = notificationHelper.createForegroundNotification(pendingIntent)
+            startForeground(NOTIFICATION_ID, initialNotification)
 
+            if (!temperatureChecker.startChecking()) {
+                Log.e(TAG, "Failed to start temperature checking")
+                stopSelf()
+                return START_NOT_STICKY
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onStartCommand", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        
         return START_STICKY
     }
 
     override fun onDestroy() {
-        temperatureChecker.stopChecking()
-        ringtoneHelper.stopRingtone()
-        unregisterReceiver(stopRingtoneReceiver)
-        super.onDestroy()
+        try {
+            temperatureChecker.stopChecking()
+            ringtoneHelper.stopRingtone()
+            try {
+                unregisterReceiver(stopRingtoneReceiver)
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Receiver not registered", e)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onDestroy", e)
+        } finally {
+            super.onDestroy()
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

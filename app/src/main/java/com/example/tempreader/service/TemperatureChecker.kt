@@ -9,6 +9,9 @@ import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.*
+import kotlin.math.abs
 
 class TemperatureChecker(
     private val context: Context,
@@ -20,107 +23,146 @@ class TemperatureChecker(
     private val onStaleData: () -> Unit,
     private val onFreshData: () -> Unit
 ) {
+    private val isMonitoring = AtomicBoolean(false)
     private val handler = Handler(Looper.getMainLooper())
+    private var lastTemp: Float = 0f
+    private var lastHumidity: Float = 0f
+    private var lastUpdateTime: Long = 0
+    private var lastWasBelowLow: Boolean = false
+    private var lastWasAboveHigh: Boolean = false
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val database =
         Firebase.database("https://esp-temp-89f99-default-rtdb.europe-west1.firebasedatabase.app")
     private val ref = database.getReference("/UsersData/IVcnpuP1hiX3p7SgsAa1n0M6gcI2/readings")
-    private var lastTemp: Float = 0f
-    private var lastWasBelowLow: Boolean = false
-    private var lastWasAboveHigh: Boolean = false
 
-    private val checkRunnable = object : Runnable {
-        override fun run() {
-            checkTemperature()
-            handler.postDelayed(this, 60000) // Check every 60 seconds
-        }
+    companion object {
+        private const val TAG = "TemperatureChecker"
+        private const val CHECK_INTERVAL = 60_000L // 1 minute
+        private const val STALE_DATA_THRESHOLD = 15 * 60 * 1000L // 15 minutes
     }
 
-    fun startChecking() {
-        handler.post(checkRunnable)
+    fun startChecking(): Boolean {
+        if (isMonitoring.getAndSet(true)) {
+            Log.w(TAG, "Temperature checking already started")
+            return true
+        }
+
+        return try {
+            scope.launch {
+                while (isMonitoring.get()) {
+                    checkTemperature()
+                    delay(CHECK_INTERVAL)
+                }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start temperature checking", e)
+            isMonitoring.set(false)
+            false
+        }
     }
 
     fun stopChecking() {
-        handler.removeCallbacks(checkRunnable)
+        if (isMonitoring.getAndSet(false)) {
+            scope.cancel()
+            handler.removeCallbacksAndMessages(null)
+            Log.d(TAG, "Temperature checking stopped")
+        }
     }
 
-    private fun checkTemperature() {
-        if (!isNetworkAvailable()) {
-            Log.d("TemperatureChecker", "No network available")
-            if (!preferencesManager.isNetworkLostNotified()) {
-                onNetworkLost()
-                preferencesManager.setNetworkLostNotified(true)
+    private suspend fun checkTemperature() = withContext(Dispatchers.IO) {
+        try {
+            if (!isNetworkAvailable()) {
+                Log.d("TemperatureChecker", "No network available")
+                if (!preferencesManager.isNetworkLostNotified()) {
+                    onNetworkLost()
+                    preferencesManager.setNetworkLostNotified(true)
+                }
+                return@withContext
             }
-            return
-        }
 
-        // Network is available, reset notification state and cancel notification
-        if (preferencesManager.isNetworkLostNotified()) {
-            onNetworkRestored()
-            preferencesManager.setNetworkLostNotified(false)
-        }
+            // Network is available, reset notification state and cancel notification
+            if (preferencesManager.isNetworkLostNotified()) {
+                onNetworkRestored()
+                preferencesManager.setNetworkLostNotified(false)
+            }
 
-        ref.get().addOnSuccessListener { snapshot ->
-            val latestReading = snapshot.children.lastOrNull()
-            if (latestReading != null) {
-                val currentTemp =
-                    latestReading.child("temperature").getValue(Float::class.java) ?: 0f
-                val humidity = latestReading.child("humidity").getValue(Float::class.java) ?: 0f
-                val timestampValue = latestReading.child("timestamp").value
+            ref.get().addOnSuccessListener { snapshot ->
+                val latestReading = snapshot.children.lastOrNull()
+                if (latestReading != null) {
+                    val currentTemp =
+                        latestReading.child("temperature").getValue(Float::class.java) ?: 0f
+                    val humidity = latestReading.child("humidity").getValue(Float::class.java) ?: 0f
+                    val timestampValue = latestReading.child("timestamp").value
 
-                // Check if data is stale (older than 15 minutes)
-                val isStale = when (timestampValue) {
-                    is Long -> isDataStale(timestampValue)
-                    is String -> isDataStale(timestampValue) // Backward compatibility
-                    else -> {
-                        Log.w("TemperatureChecker", "Invalid timestamp format: $timestampValue")
-                        true // Assume stale if format is unknown
+                    // Check if data is stale (older than 15 minutes)
+                    val isStale = when (timestampValue) {
+                        is Long -> isDataStale(timestampValue)
+                        is String -> isDataStale(timestampValue) // Backward compatibility
+                        else -> {
+                            Log.w("TemperatureChecker", "Invalid timestamp format: $timestampValue")
+                            true // Assume stale if format is unknown
+                        }
+                    }
+
+                    if (isStale && !preferencesManager.isDataStaleNotified()) {
+                        onStaleData()
+                        preferencesManager.setDataStaleNotified(true)
+                    } else if (!isStale && preferencesManager.isDataStaleNotified()) {
+                        onFreshData()
+                        preferencesManager.setDataStaleNotified(false)
+                    }
+
+                    // Get thresholds from SharedPreferences
+                    val lowerThreshold = preferencesManager.getLowerTemperatureThreshold()
+                    val upperThreshold = preferencesManager.getUpperTemperatureThreshold()
+
+                    // Temperature threshold checks
+                    if (!lastWasAboveHigh && currentTemp > upperThreshold) {
+                        if (shouldSendAlert(currentTemp, humidity)) {
+                            onAlert(currentTemp, humidity, false)
+                            preferencesManager.setLastAlertData(currentTemp, humidity)
+                        }
+                        lastWasAboveHigh = true
+                        lastWasBelowLow = false
+                    } else if (!lastWasBelowLow && currentTemp < lowerThreshold) {
+                        if (shouldSendAlert(currentTemp, humidity)) {
+                            onAlert(currentTemp, humidity, true)
+                            preferencesManager.setLastAlertData(currentTemp, humidity)
+                        }
+                        lastWasBelowLow = true
+                        lastWasAboveHigh = false
+                    } else if (currentTemp in lowerThreshold..upperThreshold) {
+                        // Reset flags when temperature is in normal range
+                        lastWasBelowLow = false
+                        lastWasAboveHigh = false
+                    }
+
+                    lastTemp = currentTemp
+                    lastHumidity = humidity
+                    onTemperatureUpdate(currentTemp, humidity)
+                } else {
+                    onTemperatureUpdate(0f, 0f) // Default values if no data
+                    if (!preferencesManager.isDataStaleNotified()) {
+                        onStaleData() // Treat no data as stale
+                        preferencesManager.setDataStaleNotified(true)
                     }
                 }
+            }.addOnFailureListener { e ->
+                Log.e("TemperatureChecker", "Error fetching data: ${e.message}", e)
+            }
 
-                if (isStale && !preferencesManager.isDataStaleNotified()) {
-                    onStaleData()
-                    preferencesManager.setDataStaleNotified(true)
-                } else if (!isStale && preferencesManager.isDataStaleNotified()) {
-                    onFreshData()
-                    preferencesManager.setDataStaleNotified(false)
-                }
-
-                // Get thresholds from SharedPreferences
-                val lowerThreshold = preferencesManager.getLowerTemperatureThreshold()
-                val upperThreshold = preferencesManager.getUpperTemperatureThreshold()
-
-                // Temperature threshold checks
-                if (!lastWasAboveHigh && currentTemp > upperThreshold) {
-                    if (shouldSendAlert(currentTemp, humidity)) {
-                        onAlert(currentTemp, humidity, false)
-                        preferencesManager.setLastAlertData(currentTemp, humidity)
-                    }
-                    lastWasAboveHigh = true
-                    lastWasBelowLow = false
-                } else if (!lastWasBelowLow && currentTemp < lowerThreshold) {
-                    if (shouldSendAlert(currentTemp, humidity)) {
-                        onAlert(currentTemp, humidity, true)
-                        preferencesManager.setLastAlertData(currentTemp, humidity)
-                    }
-                    lastWasBelowLow = true
-                    lastWasAboveHigh = false
-                } else if (currentTemp in lowerThreshold..upperThreshold) {
-                    // Reset flags when temperature is in normal range
-                    lastWasBelowLow = false
-                    lastWasAboveHigh = false
-                }
-
-                lastTemp = currentTemp
-                onTemperatureUpdate(currentTemp, humidity)
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastUpdateTime > STALE_DATA_THRESHOLD) {
+                onStaleData()
             } else {
-                onTemperatureUpdate(0f, 0f) // Default values if no data
-                if (!preferencesManager.isDataStaleNotified()) {
-                    onStaleData() // Treat no data as stale
-                    preferencesManager.setDataStaleNotified(true)
-                }
+                onFreshData()
             }
-        }.addOnFailureListener { e ->
-            Log.e("TemperatureChecker", "Error fetching data: ${e.message}", e)
+
+            // Update last check time
+            lastUpdateTime = currentTime
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking temperature", e)
         }
     }
 
@@ -148,10 +190,24 @@ class TemperatureChecker(
         }
     }
 
-    private fun shouldSendAlert(temperature: Float, humidity: Float): Boolean {
-        val lastTemp = preferencesManager.getLastAlertTemperature()
-        val lastHumidity = preferencesManager.getLastAlertHumidity()
-        return lastTemp == null || lastHumidity == null ||
-                temperature != lastTemp || humidity != lastHumidity
+    private fun shouldSendAlert(currentTemp: Float, currentHumidity: Float): Boolean {
+        val (lastTemp, lastHumidity, lastAlertTime) = preferencesManager.getLastAlertData()
+        
+        // If no previous alert or it was more than 30 minutes ago
+        if (lastAlertTime == 0L || System.currentTimeMillis() - lastAlertTime > 30 * 60 * 1000) {
+            return true
+        }
+
+        // If temperature changed significantly (more than 2 degrees)
+        if (abs(currentTemp - lastTemp) > 2) {
+            return true
+        }
+
+        // If humidity changed significantly (more than 5%)
+        if (abs(currentHumidity - lastHumidity) > 5) {
+            return true
+        }
+
+        return false
     }
 }
