@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.material3.Surface
 import com.example.tempreader.ui.App
 import com.example.tempreader.ui.MainViewModel
 import com.example.tempreader.ui.theme.TempReaderTheme
@@ -16,7 +17,9 @@ class MainActivity : ComponentActivity() {
         val viewModel by viewModels<MainViewModel>()
         setContent {
             TempReaderTheme {
-                App(viewModel = viewModel)
+                Surface {
+                    App(viewModel = viewModel)
+                }
             }
         }
     }

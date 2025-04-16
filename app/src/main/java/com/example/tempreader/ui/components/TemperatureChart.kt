@@ -43,7 +43,6 @@ fun TemperatureChart(readings: List<Reading>, modifier: Modifier = Modifier) {
         chartModelProducer.runTransaction {
             lineSeries {
                 series(
-                    currentDayReadings.map { it.timestamp },
                     currentDayReadings.map { it.temperature }
                 )
             }

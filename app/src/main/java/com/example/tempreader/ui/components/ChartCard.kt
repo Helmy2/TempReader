@@ -11,14 +11,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.tempreader.util.formatTimestampChart
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
-import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
-import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
+import com.patrykandpatrick.vico.core.cartesian.Scroll.Absolute
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 
@@ -28,30 +26,31 @@ fun ChartCard(
     chartModelProducer: CartesianChartModelProducer,
     modifier: Modifier = Modifier
 ) {
+    val scrollState = rememberVicoScrollState(
+        initialScroll = Absolute.End,
+        scrollEnabled = true
+    )
+
     Card(
         modifier = modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
-        Column(modifier = Modifier.Companion.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.Companion.padding(bottom = 8.dp)
+                modifier = Modifier.padding(bottom = 8.dp)
             )
             CartesianChartHost(
                 rememberCartesianChart(
                     rememberLineCartesianLayer(),
-                    startAxis = VerticalAxis.Companion.rememberStart(),
-                    bottomAxis = HorizontalAxis.Companion.rememberBottom(
-                        valueFormatter = { _, value, _ -> value.toLong().formatTimestampChart() },
-                        labelRotationDegrees = 45f,
-                    ),
+                    startAxis = VerticalAxis.rememberStart(),
                 ),
                 chartModelProducer,
-                modifier = Modifier.Companion
+                modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp),
-                scrollState = rememberVicoScrollState(scrollEnabled = true)
+                scrollState = scrollState
             )
         }
     }
