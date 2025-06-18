@@ -1,6 +1,7 @@
 package com.example.tempreader.service
 
 import android.content.Context
+import androidx.core.content.edit
 
 class PreferencesManager(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -16,7 +17,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_LAST_ALERT_TIME = "last_alert_time"
         
         private const val DEFAULT_LOWER_THRESHOLD = 18.0f
-        private const val DEFAULT_UPPER_THRESHOLD = 25.0f
+        private const val DEFAULT_UPPER_THRESHOLD = 35.0f
         private const val MIN_THRESHOLD_DIFFERENCE = 2.0f
     }
 
@@ -35,30 +36,30 @@ class PreferencesManager(context: Context) {
         require(lower >= -50 && upper <= 100) {
             "Temperature thresholds must be between -50°C and 100°C"
         }
-        prefs.edit()
-            .putFloat(KEY_LOWER_THRESHOLD, lower)
-            .putFloat(KEY_UPPER_THRESHOLD, upper)
-            .apply()
+        prefs.edit {
+            putFloat(KEY_LOWER_THRESHOLD, lower)
+                .putFloat(KEY_UPPER_THRESHOLD, upper)
+        }
     }
 
     fun isNetworkLostNotified(): Boolean = prefs.getBoolean(KEY_NETWORK_LOST_NOTIFIED, false)
 
     fun setNetworkLostNotified(notified: Boolean) {
-        prefs.edit().putBoolean(KEY_NETWORK_LOST_NOTIFIED, notified).apply()
+        prefs.edit { putBoolean(KEY_NETWORK_LOST_NOTIFIED, notified) }
     }
 
     fun isDataStaleNotified(): Boolean = prefs.getBoolean(KEY_DATA_STALE_NOTIFIED, false)
 
     fun setDataStaleNotified(notified: Boolean) {
-        prefs.edit().putBoolean(KEY_DATA_STALE_NOTIFIED, notified).apply()
+        prefs.edit { putBoolean(KEY_DATA_STALE_NOTIFIED, notified) }
     }
 
     fun setLastAlertData(temperature: Float, humidity: Float) {
-        prefs.edit()
-            .putFloat(KEY_LAST_ALERT_TEMP, temperature)
-            .putFloat(KEY_LAST_ALERT_HUMIDITY, humidity)
-            .putLong(KEY_LAST_ALERT_TIME, System.currentTimeMillis())
-            .apply()
+        prefs.edit {
+            putFloat(KEY_LAST_ALERT_TEMP, temperature)
+                .putFloat(KEY_LAST_ALERT_HUMIDITY, humidity)
+                .putLong(KEY_LAST_ALERT_TIME, System.currentTimeMillis())
+        }
     }
 
     fun getLastAlertData(): Triple<Float, Float, Long> {
@@ -67,13 +68,5 @@ class PreferencesManager(context: Context) {
             prefs.getFloat(KEY_LAST_ALERT_HUMIDITY, 0f),
             prefs.getLong(KEY_LAST_ALERT_TIME, 0L)
         )
-    }
-
-    fun clearLastAlertData() {
-        prefs.edit()
-            .remove(KEY_LAST_ALERT_TEMP)
-            .remove(KEY_LAST_ALERT_HUMIDITY)
-            .remove(KEY_LAST_ALERT_TIME)
-            .apply()
     }
 }

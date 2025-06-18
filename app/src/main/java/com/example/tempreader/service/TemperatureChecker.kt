@@ -27,7 +27,6 @@ class TemperatureChecker(
     private val handler = Handler(Looper.getMainLooper())
     private var lastTemp: Float = 0f
     private var lastHumidity: Float = 0f
-    private var lastUpdateTime: Long = 0
     private var lastWasBelowLow: Boolean = false
     private var lastWasAboveHigh: Boolean = false
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -81,7 +80,7 @@ class TemperatureChecker(
                 return@withContext
             }
 
-            // Network is available, reset notification state and cancel notification
+            // Network is available, so if a "network lost" notification was shown, reset it.
             if (preferencesManager.isNetworkLostNotified()) {
                 onNetworkRestored()
                 preferencesManager.setNetworkLostNotified(false)
@@ -95,7 +94,7 @@ class TemperatureChecker(
                     val humidity = latestReading.child("humidity").getValue(Float::class.java) ?: 0f
                     val timestampValue = latestReading.child("timestamp").value
 
-                    // Check if data is stale (older than 15 minutes)
+                    // Correctly check if data is stale based on its own timestamp.
                     val isStale = when (timestampValue) {
                         is Long -> isDataStale(timestampValue)
                         is String -> isDataStale(timestampValue) // Backward compatibility
@@ -105,12 +104,17 @@ class TemperatureChecker(
                         }
                     }
 
-                    if (isStale && !preferencesManager.isDataStaleNotified()) {
-                        onStaleData()
-                        preferencesManager.setDataStaleNotified(true)
-                    } else if (!isStale && preferencesManager.isDataStaleNotified()) {
-                        onFreshData()
-                        preferencesManager.setDataStaleNotified(false)
+                    if (isStale) {
+                        if (!preferencesManager.isDataStaleNotified()) {
+                            onStaleData()
+                            preferencesManager.setDataStaleNotified(true)
+                        }
+                    } else {
+                        // Data is fresh, so if a "stale data" notification was shown, reset it.
+                        if (preferencesManager.isDataStaleNotified()) {
+                            onFreshData()
+                            preferencesManager.setDataStaleNotified(false)
+                        }
                     }
 
                     // Get thresholds from SharedPreferences
@@ -142,7 +146,8 @@ class TemperatureChecker(
                     lastHumidity = humidity
                     onTemperatureUpdate(currentTemp, humidity)
                 } else {
-                    onTemperatureUpdate(0f, 0f) // Default values if no data
+                    // No data was found in the database.
+                    onTemperatureUpdate(0f, 0f) // Update UI with default values
                     if (!preferencesManager.isDataStaleNotified()) {
                         onStaleData() // Treat no data as stale
                         preferencesManager.setDataStaleNotified(true)
@@ -150,17 +155,12 @@ class TemperatureChecker(
                 }
             }.addOnFailureListener { e ->
                 Log.e("TemperatureChecker", "Error fetching data: ${e.message}", e)
+                // If fetching data fails, it's reasonable to consider the data stale.
+                if (!preferencesManager.isDataStaleNotified()) {
+                    onStaleData()
+                    preferencesManager.setDataStaleNotified(true)
+                }
             }
-
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - lastUpdateTime > STALE_DATA_THRESHOLD) {
-                onStaleData()
-            } else {
-                onFreshData()
-            }
-
-            // Update last check time
-            lastUpdateTime = currentTime
         } catch (e: Exception) {
             Log.e(TAG, "Error checking temperature", e)
         }
@@ -175,8 +175,7 @@ class TemperatureChecker(
 
     private fun isDataStale(timestampMs: Long): Boolean {
         val currentTime = System.currentTimeMillis()
-        val fifteenMinutes = 15 * 60 * 1000 // 15 minutes in milliseconds
-        return (currentTime - timestampMs) > fifteenMinutes
+        return (currentTime - timestampMs) > STALE_DATA_THRESHOLD
     }
 
     private fun isDataStale(timestampStr: String): Boolean {
@@ -192,7 +191,7 @@ class TemperatureChecker(
 
     private fun shouldSendAlert(currentTemp: Float, currentHumidity: Float): Boolean {
         val (lastTemp, lastHumidity, lastAlertTime) = preferencesManager.getLastAlertData()
-        
+
         // If no previous alert or it was more than 30 minutes ago
         if (lastAlertTime == 0L || System.currentTimeMillis() - lastAlertTime > 30 * 60 * 1000) {
             return true
