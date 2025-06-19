@@ -3,73 +3,49 @@ package com.example.tempreader.data.repository
 import android.util.Log
 import com.example.tempreader.data.local.Reading
 import com.example.tempreader.data.local.ReadingDao
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.database.ktx.database
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
-/**
- * Repository class that serves as the single source of truth for sensor data.
- * It abstracts data operations from the ViewModels and handles fetching data
- * from the local Room database and the remote Firebase Realtime Database.
- *
- * @param readingDao The Data Access Object for the Reading entity.
- */
-class ReadingRepository(private val readingDao: ReadingDao) {
+class ReadingRepository(
+    private val readingDao: ReadingDao,
+    private val auth: FirebaseAuth
+) {
 
-    companion object {
-        const val FIREBASE_URL =
-            "https://esp-temp-89f99-default-rtdb.europe-west1.firebasedatabase.app"
-        const val FIREBASE_PATH = "/UsersData/IVcnpuP1hiX3p7SgsAa1n0M6gcI2/readings"
-    }
-
-    // Expose a Flow of all readings from the database. The UI will collect this Flow.
     val allReadings: Flow<List<Reading>> = readingDao.getAllReadings()
 
-    /**
-     * Fetches the latest readings from Firebase and updates the local Room database.
-     * This function is the bridge between the remote and local data sources.
-     */
     fun syncWithFirebase() {
-        Log.d("TAG", "syncWithFirebase init")
+        val uid = auth.currentUser?.uid
+        if (uid.isNullOrBlank()) {
+            Log.e("ReadingRepository", "User is not logged in. Cannot sync with Firebase.")
+            return
+        }
 
-        val database = Firebase.database(FIREBASE_URL)
-        val ref = database.getReference(FIREBASE_PATH)
+        val database = Firebase.database("https://esp-temp-89f99-default-rtdb.europe-west1.firebasedatabase.app")
+        val path = "/UsersData/$uid/readings"
+        val ref = database.getReference(path)
 
         ref.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val newReadings = mutableListOf<Reading>()
-                for (child in snapshot.children) {
-                    try {
-                        val reading = child.getValue(Reading::class.java)
-                        if (reading != null) {
-                            newReadings.add(reading)
-                        }
-                    } catch (e: Exception) {
-                        Log.e("ReadingRepository", "Error parsing reading: ${e.message}")
-                    }
-                }
+                val newReadings = snapshot.children.mapNotNull { it.getValue(Reading::class.java) }
 
-                // Once we have the new list from Firebase, we launch a coroutine
-                // to insert them into the Room database.
-                CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                    if (newReadings.isNotEmpty()) {
+                if (newReadings.isNotEmpty()) {
+                    CoroutineScope(Dispatchers.IO).launch {
                         readingDao.insertAll(newReadings)
-                        Log.d(
-                            "ReadingRepository",
-                            "${newReadings.size} readings synced from Firebase to Room."
-                        )
+                        Log.d("ReadingRepository", "${newReadings.size} readings synced from path: $path")
                     }
                 }
             }
 
             override fun onCancelled(error: DatabaseError) {
-                Log.e("ReadingRepository", "Firebase sync failed: ${error.message}")
-                // In a production app, you might want to expose this error to the UI.
+                Log.e("ReadingRepository", "Firebase sync failed for path $path: ${error.message}")
             }
         })
     }

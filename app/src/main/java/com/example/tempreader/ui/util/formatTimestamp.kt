@@ -1,4 +1,4 @@
-package com.example.tempreader.util
+package com.example.tempreader.ui.util
 
 import android.util.Log
 import java.text.SimpleDateFormat

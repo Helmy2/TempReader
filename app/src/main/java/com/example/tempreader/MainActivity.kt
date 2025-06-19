@@ -5,19 +5,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.compose.material3.Surface
 import com.example.tempreader.service.TemperatureCheckService
-import com.example.tempreader.ui.App
-import com.example.tempreader.ui.MainViewModel
-import com.example.tempreader.ui.MainViewModelFactory
+import com.example.tempreader.ui.AppNavigation
 import com.example.tempreader.ui.theme.TempReaderTheme
 
-class MainActivity : ComponentActivity() {
-    private val mainViewModel: MainViewModel by viewModels {
-        MainViewModelFactory(application)
-    }
 
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -27,7 +21,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             TempReaderTheme {
                 Surface {
-                    App(viewModel = mainViewModel)
+                    AppNavigation()
                 }
             }
         }
