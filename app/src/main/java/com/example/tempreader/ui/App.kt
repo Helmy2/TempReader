@@ -119,20 +119,21 @@ fun App(viewModel: MainViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .padding(16.dp)
             .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
             elevation = CardDefaults.cardElevation(4.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
@@ -179,20 +180,22 @@ fun App(viewModel: MainViewModel) {
             }
         }
 
-        SensorDataChart(
-            readings = readings,
-            chartTitle = "Temperature History (°C)",
-            noDataText = "No temperature data available for today",
-            lineAndFillColor = MaterialTheme.colorScheme.primary,
-            valueSelector = { it.temperature }
-        )
+        AnimatedVisibility(readings.isNotEmpty()) {
+            Column {
+                SensorDataChart(
+                    readings = readings,
+                    chartTitle = "Temperature History (°C)",
+                    lineAndFillColor = MaterialTheme.colorScheme.primary,
+                    valueSelector = { it.temperature }
+                )
 
-        SensorDataChart(
-            readings = readings,
-            chartTitle = "Humidity History (%)",
-            noDataText = "No humidity data available for today",
-            lineAndFillColor = MaterialTheme.colorScheme.secondary,
-            valueSelector = { it.humidity }
-        )
+                SensorDataChart(
+                    readings = readings,
+                    chartTitle = "Humidity History (%)",
+                    lineAndFillColor = MaterialTheme.colorScheme.secondary,
+                    valueSelector = { it.humidity }
+                )
+            }
+        }
     }
 }

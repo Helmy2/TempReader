@@ -38,7 +38,6 @@ fun SensorDataChart(
     readings: List<Reading>,
     modifier: Modifier = Modifier,
     chartTitle: String,
-    noDataText: String,
     lineAndFillColor: Color = MaterialTheme.colorScheme.primary,
     valueSelector: (Reading) -> Float
 ) {
@@ -63,16 +62,6 @@ fun SensorDataChart(
             // Finally, unconditionally add the very last reading to ensure the chart is up-to-date.
             add(sortedReadings.last())
         }
-    }
-
-    if (filteredReadings.isEmpty()) {
-        Text(
-            text = noDataText,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.padding(16.dp)
-        )
-        return
     }
 
     val chartModelProducer = remember { CartesianChartModelProducer() }
