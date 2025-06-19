@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,8 +44,9 @@ import com.example.tempreader.util.formatTimestamp
 
 @Composable
 fun App(viewModel: MainViewModel) {
+    val readings by viewModel.readings.collectAsState()
+
     val context = LocalContext.current
-    val readings by viewModel.readings
     val latestReading = readings.lastOrNull()
     val scrollState = rememberScrollState()
     val preferencesManager = remember { PreferencesManager(context) }
@@ -70,7 +72,6 @@ fun App(viewModel: MainViewModel) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
-        viewModel.fetchReadings(context)
     }
 
     AnimatedVisibility(showPermissionPrompt) {

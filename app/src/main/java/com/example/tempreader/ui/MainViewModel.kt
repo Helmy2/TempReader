@@ -1,45 +1,38 @@
 package com.example.tempreader.ui
 
-import android.content.Context
-import android.util.Log
-import android.widget.Toast
-import androidx.compose.runtime.State
-import androidx.compose.runtime.mutableStateOf
+import android.app.Application
 import androidx.lifecycle.ViewModel
-import com.example.tempreader.data.model.Reading
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.ValueEventListener
-import com.google.firebase.database.ktx.database
-import com.google.firebase.ktx.Firebase
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.example.tempreader.data.local.AppDatabase
+import com.example.tempreader.data.local.Reading
+import com.example.tempreader.data.repository.ReadingRepository
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 
 
-class MainViewModel : ViewModel() {
-    private val _readings = mutableStateOf<List<Reading>>(emptyList())
-    val readings: State<List<Reading>> = _readings
+class MainViewModel(repository: ReadingRepository) : ViewModel() {
+    val readings: StateFlow<List<Reading>> = repository.allReadings.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
 
-    fun fetchReadings(context: Context) {
-        val database =
-            Firebase.database("https://esp-temp-89f99-default-rtdb.europe-west1.firebasedatabase.app")
-        val ref = database.getReference("/UsersData").child("IVcnpuP1hiX3p7SgsAa1n0M6gcI2")
-            .child("readings")
+    init {
+        repository.syncWithFirebase()
+    }
+}
 
-        ref.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val newReadings = mutableListOf<Reading>()
-                for (child in snapshot.children) {
-                    val temp = child.child("temperature").getValue(Float::class.java) ?: 0f
-                    val hum = child.child("humidity").getValue(Float::class.java) ?: 0f
-                    val time = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                    Log.d("TAG", "onDataChange: $time")
-                    newReadings.add(Reading(temp, hum, time))
-                }
-                _readings.value = newReadings.sortedBy { it.timestamp }
-            }
 
-            override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(context, "Error: ${error.message}", Toast.LENGTH_SHORT).show()
-            }
-        })
+class MainViewModelFactory(private val application: Application) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            // Create the repository instance here, providing it with the DAO.
+            val repository = ReadingRepository(AppDatabase.getDatabase(application).readingDao())
+            return MainViewModel(repository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }

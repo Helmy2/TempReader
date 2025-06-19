@@ -10,20 +10,24 @@ import androidx.compose.material3.Surface
 import com.example.tempreader.service.TemperatureCheckService
 import com.example.tempreader.ui.App
 import com.example.tempreader.ui.MainViewModel
+import com.example.tempreader.ui.MainViewModelFactory
 import com.example.tempreader.ui.theme.TempReaderTheme
 
 class MainActivity : ComponentActivity() {
+    private val mainViewModel: MainViewModel by viewModels {
+        MainViewModelFactory(application)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val viewModel by viewModels<MainViewModel>()
 
         startForegroundService(Intent(this, TemperatureCheckService::class.java))
 
         setContent {
             TempReaderTheme {
                 Surface {
-                    App(viewModel = viewModel)
+                    App(viewModel = mainViewModel)
                 }
             }
         }
