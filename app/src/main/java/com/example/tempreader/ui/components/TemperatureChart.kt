@@ -102,7 +102,7 @@ fun SensorDataChart(
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             CartesianChartHost(
-                zoomState = rememberVicoZoomState(initialZoom = Zoom.x(20.0)),
+                zoomState = rememberVicoZoomState(initialZoom = Zoom.x(30.0)),
                 chart = rememberCartesianChart(
                     rememberLineCartesianLayer(
                         LineCartesianLayer.LineProvider.series(

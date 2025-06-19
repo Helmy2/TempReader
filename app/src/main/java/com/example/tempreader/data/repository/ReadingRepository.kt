@@ -1,6 +1,7 @@
 package com.example.tempreader.data.repository
 
 import android.util.Log
+import com.example.tempreader.BuildConfig
 import com.example.tempreader.data.local.Reading
 import com.example.tempreader.data.local.ReadingDao
 import com.google.firebase.database.DataSnapshot
@@ -31,8 +32,9 @@ class ReadingRepository(private val readingDao: ReadingDao) {
     fun syncWithFirebase() {
         Log.d("TAG", "syncWithFirebase init")
 
-        val database = Firebase.database("https://esp-temp-89f99-default-rtdb.europe-west1.firebasedatabase.app")
-        val ref = database.getReference("/UsersData/IVcnpuP1hiX3p7SgsAa1n0M6gcI2/readings")
+
+        val database = Firebase.database(BuildConfig.firebaseUrL)
+        val ref = database.getReference(BuildConfig.firebasePath)
 
         ref.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -53,7 +55,10 @@ class ReadingRepository(private val readingDao: ReadingDao) {
                 CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                     if (newReadings.isNotEmpty()) {
                         readingDao.insertAll(newReadings)
-                        Log.d("ReadingRepository", "${newReadings.size} readings synced from Firebase to Room.")
+                        Log.d(
+                            "ReadingRepository",
+                            "${newReadings.size} readings synced from Firebase to Room."
+                        )
                     }
                 }
             }
