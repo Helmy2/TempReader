@@ -37,8 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.tempreader.service.PreferencesManager
-import com.example.tempreader.ui.components.HumidityChart
-import com.example.tempreader.ui.components.TemperatureChart
+import com.example.tempreader.ui.components.SensorDataChart
 import com.example.tempreader.ui.components.ThresholdDialog
 import com.example.tempreader.util.formatTimestamp
 
@@ -179,7 +178,20 @@ fun App(viewModel: MainViewModel) {
             }
         }
 
-        TemperatureChart(readings = readings)
-        HumidityChart(readings = readings)
+        SensorDataChart(
+            readings = readings,
+            chartTitle = "Temperature History (°C)",
+            noDataText = "No temperature data available for today",
+            lineAndFillColor = MaterialTheme.colorScheme.primary,
+            valueSelector = { it.temperature }
+        )
+
+        SensorDataChart(
+            readings = readings,
+            chartTitle = "Humidity History (%)",
+            noDataText = "No humidity data available for today",
+            lineAndFillColor = MaterialTheme.colorScheme.secondary,
+            valueSelector = { it.humidity }
+        )
     }
 }

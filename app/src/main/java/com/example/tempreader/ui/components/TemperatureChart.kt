@@ -1,6 +1,5 @@
 package com.example.tempreader.ui.components
 
-import android.util.Log
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -13,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.tempreader.data.model.Reading
 import com.example.tempreader.util.formatTimestampChart
@@ -24,7 +24,7 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
 import com.patrykandpatrick.vico.compose.common.fill
-import com.patrykandpatrick.vico.core.cartesian.Scroll.Absolute
+import com.patrykandpatrick.vico.core.cartesian.Scroll
 import com.patrykandpatrick.vico.core.cartesian.Zoom
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
@@ -33,25 +33,41 @@ import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import kotlin.math.roundToInt
 
-
 @Composable
-fun TemperatureChart(readings: List<Reading>, modifier: Modifier = Modifier) {
-    val currentDayReadings = readings.sortedBy { it.timestamp }.fold(
-        mutableListOf<Reading>()
-    ) { accumulator, currentReading ->
-        if (accumulator.isEmpty() || accumulator.last().temperature.roundToInt() != currentReading.temperature.roundToInt()) {
-            accumulator.add(currentReading)
+fun SensorDataChart(
+    readings: List<Reading>,
+    modifier: Modifier = Modifier,
+    chartTitle: String,
+    noDataText: String,
+    lineAndFillColor: Color = MaterialTheme.colorScheme.primary,
+    valueSelector: (Reading) -> Float
+) {
+    val filteredReadings = remember(readings, valueSelector) {
+        val sortedReadings = readings.sortedBy { it.timestamp }
+        if (sortedReadings.size < 2) {
+            return@remember sortedReadings
         }
-        accumulator
+
+        // Use buildList for an efficient way to construct the final list.
+        buildList {
+            // Iterate through all but the last reading.
+            sortedReadings.forEachIndexed { index, reading ->
+                if (index == sortedReadings.lastIndex) return@forEachIndexed
+
+                // Add the reading if it's the first one, or if its value
+                // is different from the previous one.
+                if (index == 0 || valueSelector(reading).roundToInt() != valueSelector(sortedReadings[index - 1]).roundToInt()) {
+                    add(reading)
+                }
+            }
+            // Finally, unconditionally add the very last reading to ensure the chart is up-to-date.
+            add(sortedReadings.last())
+        }
     }
 
-
-
-    Log.d("TAG", "TemperatureChart:${readings.size} ${currentDayReadings.size}")
-
-    if (currentDayReadings.isEmpty()) {
+    if (filteredReadings.isEmpty()) {
         Text(
-            text = "No temperature data available for today",
+            text = noDataText,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.padding(16.dp)
@@ -61,45 +77,46 @@ fun TemperatureChart(readings: List<Reading>, modifier: Modifier = Modifier) {
 
     val chartModelProducer = remember { CartesianChartModelProducer() }
 
-    LaunchedEffect(currentDayReadings) {
+    // Update the chart model whenever the filtered data changes.
+    LaunchedEffect(filteredReadings) {
         chartModelProducer.runTransaction {
             lineSeries {
-                series(y = currentDayReadings.map { it.temperature })
+                series(y = filteredReadings.map(valueSelector))
             }
         }
     }
 
     val scrollState = rememberVicoScrollState(
-        initialScroll = Absolute.End, scrollEnabled = true
+        initialScroll = Scroll.Absolute.End, scrollEnabled = true
     )
 
     Card(
-        modifier = modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Temperature History (°C)",
+                text = chartTitle,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             CartesianChartHost(
-                zoomState = rememberVicoZoomState(
-                    initialZoom = Zoom.Companion.x(20.0)
-                ),
+                zoomState = rememberVicoZoomState(initialZoom = Zoom.x(20.0)),
                 chart = rememberCartesianChart(
                     rememberLineCartesianLayer(
                         LineCartesianLayer.LineProvider.series(
                             LineCartesianLayer.Line(
                                 fill = LineCartesianLayer.LineFill.single(
-                                    fill(MaterialTheme.colorScheme.primary)
+                                    fill(lineAndFillColor)
                                 )
                             )
                         )
                     ),
                     startAxis = VerticalAxis.rememberStart(),
                     bottomAxis = HorizontalAxis.rememberBottom(
-                        valueFormatter = { x, value, y ->
-                            currentDayReadings.getOrNull(value.toInt())?.timestamp?.formatTimestampChart()
+                        valueFormatter = { _, value, _ ->
+                            filteredReadings.getOrNull(value.toInt())?.timestamp?.formatTimestampChart()
                                 ?: "N/A"
                         },
                     )

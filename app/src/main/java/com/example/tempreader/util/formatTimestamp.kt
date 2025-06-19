@@ -7,7 +7,7 @@ import java.util.Locale
 
 fun Long.formatTimestamp(): String {
     return try {
-        val format = SimpleDateFormat("dd MM, yyyy hh:mm:ss a", Locale.getDefault())
+        val format = SimpleDateFormat("hh:mm:ss a dd/MM/yyyy ", Locale.getDefault())
         format.format(Date(this * 1000))
     } catch (e: Exception) {
         Log.e("TemperatureChecker", "Error formatting timestamp: ${e.message}", e)
