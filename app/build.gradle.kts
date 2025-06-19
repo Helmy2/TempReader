@@ -11,17 +11,6 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        buildConfigField(
-            "String",
-            "firebaseUrL",
-            "\"${project.findProperty("firebaseUrL")}\""
-        )
-        buildConfigField(
-            "String",
-            "firebasePath",
-            "\"${project.findProperty("firebasePath")}\""
-        )
-
         applicationId = "com.example.tempreader"
         minSdk = 26
         targetSdk = 35
@@ -29,10 +18,6 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
-
-    buildFeatures {
-        buildConfig = true
     }
 
     buildTypes {

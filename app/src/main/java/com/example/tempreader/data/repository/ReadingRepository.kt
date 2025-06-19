@@ -1,7 +1,6 @@
 package com.example.tempreader.data.repository
 
 import android.util.Log
-import com.example.tempreader.BuildConfig
 import com.example.tempreader.data.local.Reading
 import com.example.tempreader.data.local.ReadingDao
 import com.google.firebase.database.DataSnapshot
@@ -22,6 +21,12 @@ import kotlinx.coroutines.launch
  */
 class ReadingRepository(private val readingDao: ReadingDao) {
 
+    companion object {
+        const val FIREBASE_URL =
+            "https://esp-temp-89f99-default-rtdb.europe-west1.firebasedatabase.app"
+        const val FIREBASE_PATH = "/UsersData/IVcnpuP1hiX3p7SgsAa1n0M6gcI2/readings"
+    }
+
     // Expose a Flow of all readings from the database. The UI will collect this Flow.
     val allReadings: Flow<List<Reading>> = readingDao.getAllReadings()
 
@@ -32,9 +37,8 @@ class ReadingRepository(private val readingDao: ReadingDao) {
     fun syncWithFirebase() {
         Log.d("TAG", "syncWithFirebase init")
 
-
-        val database = Firebase.database(BuildConfig.firebaseUrL)
-        val ref = database.getReference(BuildConfig.firebasePath)
+        val database = Firebase.database(FIREBASE_URL)
+        val ref = database.getReference(FIREBASE_PATH)
 
         ref.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
